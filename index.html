@@ -497,6 +497,6 @@ startMarketRefresh();
 setTimeout(()=>refreshAllMarketPrices(),1200);
 buildReportSelectors();
 renderReport();
-if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js?v=9.29').catch(()=>{});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js?v=9.30').catch(()=>{});
 document.addEventListener('input',function(e){if(['spAmt','spPeople','spPayerName'].includes(e.target.id))updatePageSplitPreview();});document.getElementById('spMode')?.addEventListener('change',updatePageSplitPreview);document.getElementById('spPayer')?.addEventListener('change',togglePageSplitFields);</script>
 </body></html>
