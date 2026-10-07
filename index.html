@@ -80,34 +80,41 @@ function normalizeIncome(x){if(!x)return x; if(x.category==='Business') x.catego
 function normalizeExpense(x){if(!x)return x; if(!coreExpenseNames.has(x.category)) x.category='Others'; if(!x.expenseName) x.expenseName=x.note||x.category||'Expense'; return x}
 S.expenses.forEach(normalizeExpense);
 
-function expenseCategoryPicker(selected=''){return `<div class="category-grid">${expenseCategories.map(([icon,name])=>`<button type="button" class="category-btn ${selected===name?'selected':''}" data-cat="${esc(name)}" onclick="pickExpenseCategory(this)"><span>${icon}</span><b>${esc(name)}</b></button>`).join('')}</div><input id="category" type="hidden" value="${esc(selected)}" required>`}
+function expenseCategoryPicker(selected='Others'){return `<div class="category-grid">${expenseCategories.map(([icon,name])=>`<button type="button" class="category-btn ${selected===name?'selected':''}" data-cat="${esc(name)}" onclick="pickExpenseCategory(this)"><span>${icon}</span><b>${esc(name)}</b></button>`).join('')}</div><input id="category" type="hidden" value="${esc(selected)}" required>`}
 function incomeCategoryPicker(selected='',idv='category',incomeName=''){return `<select id="${idv}" required onchange="toggleIncomeName(this,'incomeNameField-${idv}')">${incomeCategories.map(name=>`<option value="${esc(name)}" ${selected===name?'selected':''}>${esc(name)}</option>`).join('')}</select><div id="incomeNameField-${idv}" class="${selected==='Others'?'':'hidden'}"><label>Income Name</label><input id="incomeName-${idv}" value="${esc(incomeName)}" placeholder="e.g. Sale, commission, refund"></div>`}
 function toggleIncomeName(sel,fieldId){const el=document.getElementById(fieldId);if(el)el.classList.toggle('hidden',sel.value!=='Others')}
 function pickExpenseCategory(btn){document.querySelectorAll('.category-btn').forEach(b=>b.classList.remove('selected'));btn.classList.add('selected');document.getElementById('category').value=btn.dataset.cat}
 function openAdd(type){
 if(type==='expense'){
-modal('Add Expense',`<form class="form" onsubmit="saveTxn(event,'expense')"><label>Expense Name</label><input id="expenseName" required placeholder="e.g. Lunch, Petrol, Medicine"><label>Category</label>${expenseCategoryPicker()}<label>Amount</label><input id="amount" type="number" step="0.01" min="0" required><label>Paid From</label><select id="account">${accountOptions()}</select><label>Date</label><input id="date" type="date" value="${today()}" required><button type="submit">Save Expense</button><button type="button" class="secondary" onclick="closeModal()">Cancel</button></form>`);
+modal('Add Expense',`<form class="form" onsubmit="saveTxn(event,'expense')" novalidate><label>Expense Name</label><input id="expenseName" required placeholder="e.g. Lunch, Petrol, Medicine"><label>Category</label>${expenseCategoryPicker()}<label>Amount</label><input id="amount" type="number" step="0.01" min="0" required><label>Paid From</label><select id="account">${accountOptions()}</select><label>Date</label><input id="date" type="date" value="${today()}" required><button type="submit">Save Expense</button><button type="button" class="secondary" onclick="closeModal()">Cancel</button></form>`);
 return;
 }
-modal('Add Income',`<form class="form" onsubmit="saveTxn(event,'income')"><label>Income Name</label><input id="incomeName" placeholder="e.g. Sale, Commission, Interest"><label>Category</label>${incomeCategoryPicker('Bohra Fashion','incomeCategory')}<label>Amount</label><input id="amount" type="number" step="0.01" min="0" required><label>Received In</label><select id="account">${accountOptions()}</select><label>Date</label><input id="date" type="date" value="${today()}" required><button type="submit">Save Income</button><button type="button" class="secondary" onclick="closeModal()">Cancel</button></form>`);
+modal('Add Income',`<form class="form" onsubmit="saveTxn(event,'income')" novalidate><label>Income Name</label><input id="incomeName" placeholder="e.g. Sale, Commission, Interest"><label>Category</label>${incomeCategoryPicker('Bohra Fashion','incomeCategory')}<label>Amount</label><input id="amount" type="number" step="0.01" min="0" required><label>Received In</label><select id="account">${accountOptions()}</select><label>Date</label><input id="date" type="date" value="${today()}" required><button type="submit">Save Income</button><button type="button" class="secondary" onclick="closeModal()">Cancel</button></form>`);
 }
 
 function applyTxnCash(x,type,dir=1){const delta=(type==='income'?1:-1)*n(x.amount)*dir;if(x.account==='Bank')S.bank+=delta;else if(x.account==='Cash')S.cash+=delta;else S.investmentCash+=delta}
 function saveTxn(e,type,editId=null){
  e.preventDefault();
  try{
-  const amountEl=document.getElementById('amount'), accountEl=document.getElementById('account'), dateEl=document.getElementById('date');
-  const categoryEl=type==='income'?document.getElementById('incomeCategory'):document.getElementById('category');
+  const form=e.currentTarget||e.target;
+  const get=id=>form.querySelector('#'+id);
+  const amountEl=get('amount'), accountEl=get('account'), dateEl=get('date');
+  const categoryEl=type==='income'?get('incomeCategory'):get('category');
   if(!amountEl||!accountEl||!dateEl||!categoryEl) throw new Error('form');
-  const x={id:editId||id(),amount:n(amountEl.value),category:categoryEl.value,expenseName:type==='expense'?(document.getElementById('expenseName')?.value||'Expense'):undefined,incomeName:type==='income'?(document.getElementById('incomeName')?.value||''):undefined,account:accountEl.value,date:dateEl.value};
-  if(!x.amount||x.amount<0) throw new Error('amount');
-  if(type==='expense'&&!coreExpenseNames.has(x.category))x.category='Others';
-  if(type==='income'&&!incomeCategorySet.has(x.category))x.category='Others';
+  let category=String(categoryEl.value||'').trim();
+  if(type==='expense'&&!category) category='Others';
+  if(type==='income'&&!incomeCategorySet.has(category)) category='Others';
+  const expenseName=type==='expense'?(get('expenseName')?.value||'Expense').trim():undefined;
+  const incomeName=type==='income'?(get('incomeName')?.value||'').trim():undefined;
+  const amount=n(amountEl.value);
+  if(!(amount>0)||!accountEl.value||!dateEl.value) throw new Error('fields');
+  if(type==='expense'&&!coreExpenseNames.has(category)) category='Others';
+  const x={id:editId||id(),amount,category,expenseName,incomeName,account:accountEl.value,date:dateEl.value};
   const arr=type==='income'?S.income:S.expenses;
   if(editId){const i=arr.findIndex(a=>a.id===editId);if(i<0)throw new Error('entry');applyTxnCash(arr[i],type,-1);arr[i]=x;applyTxnCash(x,type,1)}
   else{arr.push(x);applyTxnCash(x,type,1)}
-  closeModal();save();render();
- }catch(err){alert('Could not save this entry. Please check the amount, category, account and date.')}
+  closeModal();save();
+ }catch(err){console.error(err);alert('Could not save this entry. Please check the amount, category, account and date.')}
 }
 
 function editTxn(type,idv){const arr=type==='income'?S.income:S.expenses;const x=arr.find(a=>a.id===idv);if(!x)return;if(type==='expense'){modal('Edit Expense',`<form class="form" onsubmit="saveTxn(event,'expense','${idv}')"><label>Expense Name</label><input id="expenseName" value="${esc(x.expenseName||'')}" required><label>Category</label>${expenseCategoryPicker(x.category||'Others')}<label>Amount</label><input id="amount" type="number" step="0.01" value="${x.amount}" required><label>Paid From</label><select id="account">${accountOptions(x.account||'Bank')}</select><label>Date</label><input id="date" type="date" value="${x.date||today()}" required><button>Save Expense</button><button type="button" class="secondary" onclick="closeModal()">Cancel</button></form>`)}else{modal('Edit Income',`<form class="form" onsubmit="saveTxn(event,'income','${idv}')"><label>Income Name</label><input id="incomeName" value="${esc(x.incomeName||'')}"><label>Category</label>${incomeCategoryPicker(x.category||'Others')}<label>Amount</label><input id="amount" type="number" step="0.01" value="${x.amount}" required><label>Received In</label><select id="account">${accountOptions(x.account||'Bank')}</select><label>Date</label><input id="date" type="date" value="${x.date||today()}" required><button>Save Income</button><button type="button" class="secondary" onclick="closeModal()">Cancel</button></form>`)}}
