@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#102f27">
 <link rel="manifest" href="manifest.webmanifest">
-<title>My Money</title>
+<title>My Money — Stable Edition</title>
+<meta name="color-scheme" content="light">
 <style>
 :root{--green:#102f27;--green2:#17483a;--gold:#b08d57;--cream:#f5f1e8;--paper:#fffdf8;--ink:#101713;--muted:#39443f;--line:#ded8cb;--red:#b63f45;--blue:#315d8c;--mint:#e7f0ea;--shadow:0 10px 28px rgba(36,48,42,.08)}
 *{box-sizing:border-box}html,body{margin:0;min-height:100%;background:radial-gradient(circle at top,#fbfaf6 0,#f5f1e8 48%,#eee9dd 100%);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}body{padding-bottom:88px}button,input,select{font:inherit}button{border:0;border-radius:14px;padding:12px 15px;background:var(--green);color:#fff;font-weight:750;cursor:pointer}button:active{transform:scale(.98)}input,select{width:100%;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);outline:none}input:focus,select:focus{border-color:var(--gold)}
@@ -40,12 +41,20 @@ async function dbGet(){try{const db=await openDB();if(!db)return null;return awa
 async function dbPut(data){try{const db=await openDB();if(!db)return;await new Promise(res=>{const r=db.transaction('state','readwrite').objectStore('state').put(data,'main');r.onsuccess=()=>res();r.onerror=()=>res()})}catch(e){}}
 function localLoad(){try{return normalize(JSON.parse(localStorage.getItem(KEY)||'null'))}catch(e){return normalize(null)}}
 async function boot(){
-  const local=localLoad();
-  const stored=await dbGet();
-  S=local;
-  if(stored&&stored.data&&n(stored.savedAt)>n(local.savedAt)){S=normalize(stored.data);try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
-  rolloverIfNeeded();
-  render();
+  try {
+    const local=localLoad();
+    S=local;
+    const stored=await dbGet();
+    if(stored&&stored.data&&n(stored.savedAt)>n(local.savedAt)){S=normalize(stored.data);try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+    rolloverIfNeeded();
+    await dbPut({savedAt:n(S.savedAt)||Date.now(),data:S});
+    render();
+  } catch(err) {
+    console.error('My Money startup failed',err);
+    if(!S) S=localLoad();
+    const app=document.getElementById('app');
+    if(app) app.innerHTML='<section class="section"><div class="card"><h2>My Money is recovering</h2><p>Your saved data has not been intentionally deleted. Tap Retry to reload your saved data.</p><button onclick="location.reload()">Retry</button><button class="secondary" onclick="backup()">Backup Data</button></div></section>'+nav();
+  }
 }
 async function persist(){S.savedAt=Date.now();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}await dbPut({savedAt:S.savedAt,data:S});render()}
 function liquidKey(name){return name==='Bank'?'bank':name==='Cash'?'cash':'investmentCash'}
@@ -128,9 +137,13 @@ function settings(){layout(`<section class="section"><div class="toolbar"><h2>Se
 function backup(){const blob=new Blob([JSON.stringify({app:'My Money',version:1,data:S},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='my-money-backup-'+today()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 async function restoreFile(e){const file=e.target.files?.[0];if(!file)return;try{const raw=await file.text(),j=JSON.parse(raw),data=j.data||j;if(!data||typeof data!=='object')throw Error();S=normalize(data);rolloverIfNeeded();await persist();alert('Backup restored successfully.')}catch(err){alert('Invalid My Money backup file.')}}
 async function resetApp(){if(!confirm('Delete all My Money data from this device? This cannot be undone unless you have a backup.'))return;S=normalize(null);localStorage.removeItem(KEY);try{const db=await openDB();if(db)db.transaction('state','readwrite').objectStore('state').delete('main')}catch(e){}render()}
-function render(){try{({home,transactions,loans,reports,settings}[page]||home)()}catch(e){console.error(e);$('app').innerHTML='<section class="section"><div class="card"><h2>My Money could not load</h2><p>Please refresh the app. Your saved data has not been deleted.</p></div></section>'+nav()}}
+function render(){try{if(!S) S=localLoad();({home,transactions,loans,reports,settings}[page]||home)()}catch(e){console.error('My Money render failed',e);const app=$('app');if(app)app.innerHTML='<section class="section"><div class="card"><h2>My Money needs to recover</h2><p>Your saved data has not been deleted. Please tap Retry. If the problem repeats, use Backup Data before trying other steps.</p><button onclick="location.reload()">Retry</button><button class="secondary" onclick="backup()">Backup Data</button></div></section>'+nav()}}
+window.addEventListener('error',e=>{console.error('Global app error',e.error||e.message)});
+window.addEventListener('unhandledrejection',e=>{console.error('Async app error',e.reason)});
 function go(p){page=p;render()}
-window.addEventListener('DOMContentLoaded',()=>{if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js?v=2').catch(()=>{});boot()});
+// Stable Edition: intentionally do not register a service worker. Remove older My Money workers/caches to prevent stale blank screens.
+async function removeOldAppCache(){try{if('serviceWorker' in navigator){const regs=await navigator.serviceWorker.getRegistrations();for(const reg of regs){const url=reg.active?.scriptURL||reg.waiting?.scriptURL||reg.installing?.scriptURL||'';if(url.includes('/my-money/')||url.endsWith('/sw.js')) await reg.unregister();}}if('caches' in window){const keys=await caches.keys();for(const key of keys){if(key.toLowerCase().includes('mymoney')||key.toLowerCase().includes('my-money'))await caches.delete(key);}}}catch(e){console.warn('Old cache cleanup skipped',e)}}
+window.addEventListener('DOMContentLoaded',async()=>{await removeOldAppCache();await boot()});
 </script>
 </body>
 </html>
